@@ -1,13 +1,15 @@
 package com.gregtechceu.gtceu.integration.kjs.recipe.components;
 
+import com.gregtechceu.gtceu.GTCEu;
 import com.gregtechceu.gtceu.api.capability.recipe.RecipeCapability;
 import com.gregtechceu.gtceu.api.recipe.content.Content;
 
 import com.mojang.serialization.Codec;
-import dev.latvian.mods.kubejs.recipe.KubeRecipe;
+import dev.latvian.mods.kubejs.recipe.RecipeScriptContext;
 import dev.latvian.mods.kubejs.recipe.component.RecipeComponent;
+import dev.latvian.mods.kubejs.recipe.component.RecipeComponentType;
+import dev.latvian.mods.kubejs.recipe.filter.RecipeMatchContext;
 import dev.latvian.mods.kubejs.recipe.match.ReplacementMatchInfo;
-import dev.latvian.mods.rhino.Context;
 import dev.latvian.mods.rhino.type.TypeInfo;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -18,6 +20,13 @@ public record CapabilityMapComponent() implements RecipeComponent<CapabilityMap>
     public static final Codec<CapabilityMap> CODEC = RecipeCapability.CODEC
             .xmap(CapabilityMap::new, Function.identity());
     public static final CapabilityMapComponent INSTANCE = new CapabilityMapComponent();
+    public static final RecipeComponentType<CapabilityMap> TYPE = RecipeComponentType
+            .unit(GTCEu.id("capability_map"), INSTANCE);
+
+    @Override
+    public RecipeComponentType<?> type() {
+        return TYPE;
+    }
 
     @Override
     public Codec<CapabilityMap> codec() {
@@ -35,14 +44,27 @@ public record CapabilityMapComponent() implements RecipeComponent<CapabilityMap>
     }
 
     @Override
-    public CapabilityMap replace(Context cx, KubeRecipe recipe, CapabilityMap original,
+    public boolean matches(RecipeMatchContext cx, CapabilityMap value, ReplacementMatchInfo match) {
+        for (var entry : value.entrySet()) {
+            var content = GTRecipeComponents.VALID_CAPS.get(entry.getKey());
+            if (content == null) continue;
+            for (Content c : entry.getValue()) {
+                if (content.matches(cx, c, match)) return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public CapabilityMap replace(RecipeScriptContext cx, CapabilityMap original,
                                  ReplacementMatchInfo match, Object with) {
         AtomicBoolean changed = new AtomicBoolean(false);
         original.forEach((key, values) -> {
             var content = GTRecipeComponents.VALID_CAPS.get(key);
+            if (content == null) return;
             for (int i = 0; i < values.size(); ++i) {
                 Content value = values.get(i);
-                Content result = content.replace(cx, recipe, value, match, with);
+                Content result = content.replace(cx, value, match, with);
                 if (!result.equals(value)) {
                     changed.set(true);
                     values.set(i, result);
